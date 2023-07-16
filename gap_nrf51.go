@@ -67,14 +67,15 @@ func (a *Advertisement) Stop() error {
 	return makeError(errCode)
 }
 
+var params = &C.ble_gap_adv_params_t{
+	_type:   C.BLE_GAP_ADV_TYPE_ADV_IND,
+	fp:      C.BLE_GAP_ADV_FP_ANY,
+	timeout: 0, // no timeout
+}
+
 // Low-level version of Start. Used to restart advertisement when a connection
 // is lost.
 func (a *Advertisement) start() uint32 {
-	params := C.ble_gap_adv_params_t{
-		_type:    C.BLE_GAP_ADV_TYPE_ADV_IND,
-		fp:       C.BLE_GAP_ADV_FP_ANY,
-		interval: uint16(a.interval),
-		timeout:  0, // no timeout
-	}
-	return C.sd_ble_gap_adv_start(&params)
+	params.interval = uint16(a.interval)
+	return C.sd_ble_gap_adv_start(params)
 }

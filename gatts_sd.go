@@ -100,6 +100,13 @@ func (a *Adapter) getCharWriteHandler(handle uint16) *charWriteHandler {
 	return nil // not found
 }
 
+var p_len uint16
+var hvx_params = &C.ble_gatts_hvx_params_t{
+	_type: C.BLE_GATT_HVX_NOTIFICATION,
+}
+
+var gatts_value = &C.ble_gatts_value_t{}
+
 // Write replaces the characteristic value with a new value.
 func (c *Characteristic) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
@@ -110,13 +117,11 @@ func (c *Characteristic) Write(p []byte) (n int, err error) {
 	connHandle := currentConnection.Get()
 	if connHandle != C.BLE_CONN_HANDLE_INVALID {
 		// There is a connected central.
-		p_len := uint16(len(p))
-		errCode := C.sd_ble_gatts_hvx(connHandle, &C.ble_gatts_hvx_params_t{
-			handle: c.handle,
-			_type:  C.BLE_GATT_HVX_NOTIFICATION,
-			p_len:  &p_len,
-			p_data: &p[0],
-		})
+		p_len = uint16(len(p))
+		hvx_params.handle = c.handle
+		hvx_params.p_len = &p_len
+		hvx_params.p_data = &p[0]
+		errCode := C.sd_ble_gatts_hvx(connHandle, hvx_params)
 
 		// Check for some expected errors. Don't report them as errors, but
 		// instead fall through and do a normal characteristic value update.
@@ -134,10 +139,9 @@ func (c *Characteristic) Write(p []byte) (n int, err error) {
 		}
 	}
 
-	errCode := C.sd_ble_gatts_value_set(C.BLE_CONN_HANDLE_INVALID, c.handle, &C.ble_gatts_value_t{
-		len:     uint16(len(p)),
-		p_value: &p[0],
-	})
+	gatts_value.len = uint16(len(p))
+	gatts_value.p_value = &p[0]
+	errCode := C.sd_ble_gatts_value_set(C.BLE_CONN_HANDLE_INVALID, c.handle, gatts_value)
 	if errCode != 0 {
 		return 0, Error(errCode)
 	}
