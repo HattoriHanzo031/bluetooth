@@ -6,6 +6,16 @@ package bluetooth
 /*
 #include "ble_gap.h"
 #include "ble_gatts.h"
+
+uint32_t sd_ble_gatts_hvx_noescape(uint16_t conn_handle, uint16_t handle, uint8_t type, uint16_t offset, uint16_t len, uint8_t *p_data) {
+	ble_gatts_hvx_params_t p_hvx_params = {handle, type, offset, &len, p_data};
+	return sd_ble_gatts_hvx(conn_handle, &p_hvx_params);
+}
+
+uint32_t sd_ble_gatts_value_set_noescape(uint16_t conn_handle, uint16_t handle, ble_gatts_value_t p_value) {
+	return sd_ble_gatts_value_set(conn_handle, handle, &p_value);
+}
+
 */
 import "C"
 
@@ -100,16 +110,10 @@ func (a *Adapter) getCharWriteHandler(handle uint16) *charWriteHandler {
 	return nil // not found
 }
 
-var p_len uint16
-var hvx_params = &C.ble_gatts_hvx_params_t{
-	_type: C.BLE_GATT_HVX_NOTIFICATION,
-}
-
-var gatts_value = &C.ble_gatts_value_t{}
-
 // Write replaces the characteristic value with a new value.
 func (c *Characteristic) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
+	p_len := len(p)
+	if p_len == 0 {
 		// Nothing to write.
 		return 0, nil
 	}
@@ -117,11 +121,7 @@ func (c *Characteristic) Write(p []byte) (n int, err error) {
 	connHandle := currentConnection.Get()
 	if connHandle != C.BLE_CONN_HANDLE_INVALID {
 		// There is a connected central.
-		p_len = uint16(len(p))
-		hvx_params.handle = c.handle
-		hvx_params.p_len = &p_len
-		hvx_params.p_data = &p[0]
-		errCode := C.sd_ble_gatts_hvx(connHandle, hvx_params)
+		errCode := C.sd_ble_gatts_hvx_noescape(connHandle, c.handle, C.BLE_GATT_HVX_NOTIFICATION, 0, uint16(p_len), &p[0])
 
 		// Check for some expected errors. Don't report them as errors, but
 		// instead fall through and do a normal characteristic value update.
@@ -139,12 +139,13 @@ func (c *Characteristic) Write(p []byte) (n int, err error) {
 		}
 	}
 
-	gatts_value.len = uint16(len(p))
-	gatts_value.p_value = &p[0]
-	errCode := C.sd_ble_gatts_value_set(C.BLE_CONN_HANDLE_INVALID, c.handle, gatts_value)
+	errCode := C.sd_ble_gatts_value_set_noescape(C.BLE_CONN_HANDLE_INVALID, c.handle, C.ble_gatts_value_t{
+		len:     uint16(len(p)),
+		p_value: &p[0],
+	})
 	if errCode != 0 {
 		return 0, Error(errCode)
 	}
 
-	return len(p), nil
+	return p_len, nil
 }
